@@ -8,6 +8,11 @@ const users = require("./routes/api/users");
 // body-parser allows you to test routes via Postman
 const bodyParser = require("body-parser");
 
+// set up Passport to authenticate our token and construct private routes
+const passport = require('passport');
+require('./config/passport')(passport);
+
+
 mongoose
   .connect(db, { 
     useNewUrlParser: true,
@@ -21,11 +26,13 @@ app.use(bodyParser.urlencoded({
 }));
 
 app.use(bodyParser.json());
+
+app.use(passport.initialize()); //add middleware for Passport
 // run server at this port for heroku deployment or @ port 5000
 const port = process.env.PORT || 5000;
 
-// create a basic route to render info
-app.get("/", (req, res) => res.send("Boom!"));
+// create a basic route to render info for testing purposes
+// app.get("/", (req, res) => res.send("Boom!"));
 
 // start a socket to listen for connections on the path
 app.listen(port, () => console.log(`Server is running on port ${port}`));

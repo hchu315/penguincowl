@@ -5,8 +5,11 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 // import user model to create new users. A Model is an interface for creating, querying, updating, deleting records, etc.
 const User = require('../../models/User');
-const jwt = require('jsonwebtoken');
 const keys = require('../../config/keys');
+const jwt = require('jsonwebtoken');
+const validateLoginInput = require('../../validation/login');
+const validateRegisterInput = require('../../validation/register');
+const passport = require('passport');
 
 
 // setting up a test route. the callback must take a request and response parameter.
@@ -21,18 +24,19 @@ router.post("/register", (req, res) => {
   if (!isValid) {
     return res.status(400).json(errors);
   }
-
-  User.findOne({ name: req.body.name }).then(user => {
+  
+  User.findOne({ handle: req.body.handle }).then(user => {
     if (user) {
-      errors.name = "User already exists";
+      errors.handle = "User already exists";
       return res.status(400).json(errors);
     } else {
       const newUser = new User({
-        name: req.body.name,
+        handle: req.body.handle,
         email: req.body.email,
         password: req.body.password
       });
 
+      // store pw in a salted and encrypted password hash w/ user
       bcrypt.genSalt(10, (err, salt) => {
         bcrypt.hash(newUser.password, salt, (err, hash) => {
           if (err) throw err;
@@ -40,9 +44,15 @@ router.post("/register", (req, res) => {
           newUser
             .save()
             .then(user => {
-              const payload = { id: user.id, name: user.name };
+              // set up the paylod for web token signing that's returned to user when signed/logged in
+              const payload = { id: user.id, handle: user.handle };
 
-              jwt.sign(payload, keys.secretOrKey, { expiresIn: 3600 }, (err, token) => {
+              jwt.sign(
+                payload, 
+                keys.secretOrKey, 
+                // tells key to expire in 1 hr
+                { expiresIn: 3600 }, 
+                (err, token) => {
                 res.json({
                   success: true,
                   token: "Bearer " + token
@@ -56,6 +66,8 @@ router.post("/register", (req, res) => {
   });
 });
 
+
+// LOGIN ROUTE
 router.post("/login", (req, res) => {
   const { errors, isValid } = validateLoginInput(req.body);
 
@@ -63,20 +75,24 @@ router.post("/login", (req, res) => {
     return res.status(400).json(errors);
   }
 
-  const name = req.body.name;
+  const handle = req.body.handle;
   const password = req.body.password;
 
-  User.findOne({ name }).then(user => {
+  User.findOne({ handle }).then(user => {
     if (!user) {
-      errors.name = "This user does not exist";
+      errors.handle = "This user does not exist";
       return res.status(400).json(errors);
     }
 
     bcrypt.compare(password, user.password).then(isMatch => {
       if (isMatch) {
-        const payload = { id: user.id, name: user.name };
+        const payload = { id: user.id, handle: user.handle };
 
-        jwt.sign(payload, keys.secretOrKeys, { expiresIn: 3600 }, (err, token) => {
+        jwt.sign(
+          payload, 
+          keys.secretOrKey, 
+          { expiresIn: 3600 }, 
+          (err, token) => {
           res.json({
             success: true,
             token: "Bearer " + token
@@ -89,5 +105,14 @@ router.post("/login", (req, res) => {
     });
   });
 });
+
+// Private auth route, require auth token to be sent w/ request before accessible
+router.get('/current', passport.authenticate('jwt', {session: false}), (req, res) => {
+  res.json({
+    id: req.user.id,
+    handle: req.user.handle,
+    email: req.user.email
+  })
+})
 
 module.exports = router;
